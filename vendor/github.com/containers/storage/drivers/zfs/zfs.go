@@ -13,13 +13,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/containers/storage/drivers"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/mount"
 	"github.com/containers/storage/pkg/parsers"
 	zfs "github.com/mistifyio/go-zfs"
 	"github.com/opencontainers/selinux/go-selinux/label"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type zfsOptions struct {
@@ -47,13 +48,13 @@ func Init(base string, opt []string, uidMaps, gidMaps []idtools.IDMap) (graphdri
 
 	if _, err := exec.LookPath("zfs"); err != nil {
 		logrus.Debugf("[zfs] zfs command is not available: %v", err)
-		return nil, graphdriver.ErrPrerequisites
+		return nil, errors.Wrap(graphdriver.ErrPrerequisites, "the 'zfs' command is not available")
 	}
 
 	file, err := os.OpenFile("/dev/zfs", os.O_RDWR, 600)
 	if err != nil {
 		logrus.Debugf("[zfs] cannot open /dev/zfs: %v", err)
-		return nil, graphdriver.ErrPrerequisites
+		return nil, errors.Wrapf(graphdriver.ErrPrerequisites, "could not open /dev/zfs: %v", err)
 	}
 	defer file.Close()
 
@@ -210,8 +211,8 @@ func (d *Driver) Status() [][2]string {
 	}
 }
 
-// GetMetadata returns image/container metadata related to graph driver
-func (d *Driver) GetMetadata(id string) (map[string]string, error) {
+// Metadata returns image/container metadata related to graph driver
+func (d *Driver) Metadata(id string) (map[string]string, error) {
 	return nil, nil
 }
 
@@ -402,4 +403,10 @@ func (d *Driver) Exists(id string) bool {
 	d.Lock()
 	defer d.Unlock()
 	return d.filesystemsCache[d.zfsPath(id)] == true
+}
+
+// AdditionalImageStores returns additional image stores supported by the driver
+func (d *Driver) AdditionalImageStores() []string {
+	var imageStores []string
+	return imageStores
 }

@@ -11,12 +11,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+
+	"github.com/ostreedev/ostree-go/pkg/otbuiltin"
 )
 
 type blobToImport struct {
@@ -86,6 +89,11 @@ func (d *ostreeImageDestination) AcceptsForeignLayerURLs() bool {
 	return false
 }
 
+// MustMatchRuntimeOS returns true iff the destination can store only images targeted for the current runtime OS. False otherwise.
+func (d *ostreeImageDestination) MustMatchRuntimeOS() bool {
+	return true
+}
+
 func (d *ostreeImageDestination) PutBlob(stream io.Reader, inputInfo types.BlobInfo) (types.BlobInfo, error) {
 	tmpDir, err := ioutil.TempDir(d.tmpDirPath, "blob")
 	if err != nil {
@@ -119,7 +127,51 @@ func (d *ostreeImageDestination) PutBlob(stream io.Reader, inputInfo types.BlobI
 	return types.BlobInfo{Digest: computedDigest, Size: size}, nil
 }
 
-func (d *ostreeImageDestination) importBlob(blob *blobToImport) error {
+func fixFiles(dir string, usermode bool) error {
+	entries, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, info := range entries {
+		fullpath := filepath.Join(dir, info.Name())
+		if info.Mode()&(os.ModeNamedPipe|os.ModeSocket|os.ModeDevice) != 0 {
+			if err := os.Remove(fullpath); err != nil {
+				return err
+			}
+			continue
+		}
+		if info.IsDir() {
+			if usermode {
+				if err := os.Chmod(fullpath, info.Mode()|0700); err != nil {
+					return err
+				}
+			}
+			err = fixFiles(fullpath, usermode)
+			if err != nil {
+				return err
+			}
+		} else if usermode && (info.Mode().IsRegular() || (info.Mode()&os.ModeSymlink) != 0) {
+			if err := os.Chmod(fullpath, info.Mode()|0600); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (d *ostreeImageDestination) ostreeCommit(repo *otbuiltin.Repo, branch string, root string, metadata []string) error {
+	opts := otbuiltin.NewCommitOptions()
+	opts.AddMetadataString = metadata
+	opts.Timestamp = time.Now()
+	// OCI layers have no parent OSTree commit
+	opts.Parent = "0000000000000000000000000000000000000000000000000000000000000000"
+	_, err := repo.Commit(root, branch, opts)
+	return err
+}
+
+func (d *ostreeImageDestination) importBlob(repo *otbuiltin.Repo, blob *blobToImport) error {
 	ostreeBranch := fmt.Sprintf("ociimage/%s", blob.Digest.Hex())
 	destinationPath := filepath.Join(d.tmpDirPath, blob.Digest.Hex(), "root")
 	if err := ensureDirectoryExists(destinationPath); err != nil {
@@ -130,15 +182,24 @@ func (d *ostreeImageDestination) importBlob(blob *blobToImport) error {
 		os.RemoveAll(destinationPath)
 	}()
 
-	err := archive.UntarPath(blob.BlobPath, destinationPath)
-	if err != nil {
-		return err
+	if os.Getuid() == 0 {
+		if err := archive.UntarPath(blob.BlobPath, destinationPath); err != nil {
+			return err
+		}
+		if err := fixFiles(destinationPath, false); err != nil {
+			return err
+		}
+	} else {
+		os.MkdirAll(destinationPath, 0755)
+		if err := exec.Command("tar", "-C", destinationPath, "--no-same-owner", "--no-same-permissions", "--delay-directory-restore", "-xf", blob.BlobPath).Run(); err != nil {
+			return err
+		}
+
+		if err := fixFiles(destinationPath, true); err != nil {
+			return err
+		}
 	}
-	return exec.Command("ostree", "commit",
-		"--repo", d.ref.repo,
-		fmt.Sprintf("--add-metadata-string=docker.size=%d", blob.Size),
-		"--branch", ostreeBranch,
-		fmt.Sprintf("--tree=dir=%s", destinationPath)).Run()
+	return d.ostreeCommit(repo, ostreeBranch, destinationPath, []string{fmt.Sprintf("docker.size=%d", blob.Size)})
 }
 
 func (d *ostreeImageDestination) importConfig(blob *blobToImport) error {
@@ -171,6 +232,10 @@ func (d *ostreeImageDestination) ReapplyBlob(info types.BlobInfo) (types.BlobInf
 	return info, nil
 }
 
+// PutManifest writes manifest to the destination.
+// FIXME? This should also receive a MIME type if known, to differentiate between schema versions.
+// If the destination is in principle available, refuses this manifest type (e.g. it does not recognize the schema),
+// but may accept a different manifest type, the returned error must be an ManifestTypeRejectedError.
 func (d *ostreeImageDestination) PutManifest(manifest []byte) error {
 	d.manifest = string(manifest)
 
@@ -202,6 +267,16 @@ func (d *ostreeImageDestination) PutSignatures(signatures [][]byte) error {
 }
 
 func (d *ostreeImageDestination) Commit() error {
+	repo, err := otbuiltin.OpenRepo(d.ref.repo)
+	if err != nil {
+		return err
+	}
+
+	_, err = repo.PrepareTransaction()
+	if err != nil {
+		return err
+	}
+
 	for _, layer := range d.schema.LayersDescriptors {
 		hash := layer.Digest.Hex()
 		blob := d.blobs[hash]
@@ -210,7 +285,7 @@ func (d *ostreeImageDestination) Commit() error {
 		if blob == nil {
 			continue
 		}
-		err := d.importBlob(blob)
+		err := d.importBlob(repo, blob)
 		if err != nil {
 			return err
 		}
@@ -226,11 +301,11 @@ func (d *ostreeImageDestination) Commit() error {
 	}
 
 	manifestPath := filepath.Join(d.tmpDirPath, "manifest")
-	err := exec.Command("ostree", "commit",
-		"--repo", d.ref.repo,
-		fmt.Sprintf("--add-metadata-string=docker.manifest=%s", string(d.manifest)),
-		fmt.Sprintf("--branch=ociimage/%s", d.ref.branchName),
-		manifestPath).Run()
+
+	metadata := []string{fmt.Sprintf("docker.manifest=%s", string(d.manifest))}
+	err = d.ostreeCommit(repo, fmt.Sprintf("ociimage/%s", d.ref.branchName), manifestPath, metadata)
+
+	_, err = repo.CommitTransaction()
 	return err
 }
 

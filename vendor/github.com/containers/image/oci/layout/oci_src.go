@@ -1,7 +1,7 @@
 package layout
 
 import (
-	"encoding/json"
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -12,12 +12,17 @@ import (
 )
 
 type ociImageSource struct {
-	ref ociReference
+	ref        ociReference
+	descriptor imgspecv1.Descriptor
 }
 
 // newImageSource returns an ImageSource for reading from an existing directory.
-func newImageSource(ref ociReference) types.ImageSource {
-	return &ociImageSource{ref: ref}
+func newImageSource(ref ociReference) (types.ImageSource, error) {
+	descriptor, err := ref.getManifestDescriptor()
+	if err != nil {
+		return nil, err
+	}
+	return &ociImageSource{ref: ref, descriptor: descriptor}, nil
 }
 
 // Reference returns the reference used to set up this source.
@@ -33,19 +38,7 @@ func (s *ociImageSource) Close() error {
 // GetManifest returns the image's manifest along with its MIME type (which may be empty when it can't be determined but the manifest is available).
 // It may use a remote (= slow) service.
 func (s *ociImageSource) GetManifest() ([]byte, string, error) {
-	descriptorPath := s.ref.descriptorPath(s.ref.tag)
-	data, err := ioutil.ReadFile(descriptorPath)
-	if err != nil {
-		return nil, "", err
-	}
-
-	desc := imgspecv1.Descriptor{}
-	err = json.Unmarshal(data, &desc)
-	if err != nil {
-		return nil, "", err
-	}
-
-	manifestPath, err := s.ref.blobPath(digest.Digest(desc.Digest))
+	manifestPath, err := s.ref.blobPath(digest.Digest(s.descriptor.Digest))
 	if err != nil {
 		return nil, "", err
 	}
@@ -54,7 +47,7 @@ func (s *ociImageSource) GetManifest() ([]byte, string, error) {
 		return nil, "", err
 	}
 
-	return m, desc.MediaType, nil
+	return m, s.descriptor.MediaType, nil
 }
 
 func (s *ociImageSource) GetTargetManifest(digest digest.Digest) ([]byte, string, error) {
@@ -93,6 +86,6 @@ func (s *ociImageSource) GetBlob(info types.BlobInfo) (io.ReadCloser, int64, err
 	return r, fi.Size(), nil
 }
 
-func (s *ociImageSource) GetSignatures() ([][]byte, error) {
+func (s *ociImageSource) GetSignatures(context.Context) ([][]byte, error) {
 	return [][]byte{}, nil
 }

@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/containers/image/transports"
 	"github.com/containers/image/transports/alltransports"
 	"github.com/urfave/cli"
 )
@@ -29,8 +31,16 @@ func deleteHandler(context *cli.Context) error {
 }
 
 var deleteCmd = cli.Command{
-	Name:      "delete",
-	Usage:     "Delete image IMAGE-NAME",
+	Name:  "delete",
+	Usage: "Delete image IMAGE-NAME",
+	Description: fmt.Sprintf(`
+	Delete an "IMAGE_NAME" from a transport
+
+	Supported transports:
+	%s
+
+	See skopeo(1) section "IMAGE NAMES" for the expected format
+	`, strings.Join(transports.ListNames(), ", ")),
 	ArgsUsage: "IMAGE-NAME",
 	Action:    deleteHandler,
 	Flags: []cli.Flag{
@@ -46,7 +56,7 @@ var deleteCmd = cli.Command{
 		},
 		cli.BoolTFlag{
 			Name:  "tls-verify",
-			Usage: "require HTTPS and verify certificates when talking to docker registries (defaults to true)",
+			Usage: "require HTTPS and verify certificates when talking to container registries (defaults to true)",
 		},
 	},
 }

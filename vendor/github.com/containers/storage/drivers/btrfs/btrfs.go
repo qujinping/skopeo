@@ -29,6 +29,7 @@ import (
 	"github.com/containers/storage/pkg/parsers"
 	"github.com/docker/go-units"
 	"github.com/opencontainers/selinux/go-selinux/label"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -55,7 +56,7 @@ func Init(home string, options []string, uidMaps, gidMaps []idtools.IDMap) (grap
 	}
 
 	if fsMagic != graphdriver.FsMagicBtrfs {
-		return nil, graphdriver.ErrPrerequisites
+		return nil, errors.Wrapf(graphdriver.ErrPrerequisites, "%q is not on a btrfs filesystem", home)
 	}
 
 	rootUID, rootGID, err := idtools.GetRootUIDGID(uidMaps, gidMaps)
@@ -143,8 +144,8 @@ func (d *Driver) Status() [][2]string {
 	return status
 }
 
-// GetMetadata returns empty metadata for this driver.
-func (d *Driver) GetMetadata(id string) (map[string]string, error) {
+// Metadata returns empty metadata for this driver.
+func (d *Driver) Metadata(id string) (map[string]string, error) {
 	return nil, nil
 }
 
@@ -517,4 +518,10 @@ func (d *Driver) Exists(id string) bool {
 	dir := d.subvolumesDirID(id)
 	_, err := os.Stat(dir)
 	return err == nil
+}
+
+// AdditionalImageStores returns additional image stores supported by the driver
+func (d *Driver) AdditionalImageStores() []string {
+	var imageStores []string
+	return imageStores
 }

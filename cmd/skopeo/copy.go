@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/containers/image/copy"
+	"github.com/containers/image/transports"
 	"github.com/containers/image/transports/alltransports"
 	"github.com/containers/image/types"
 	"github.com/urfave/cli"
@@ -63,8 +65,17 @@ func copyHandler(context *cli.Context) error {
 }
 
 var copyCmd = cli.Command{
-	Name:      "copy",
-	Usage:     "Copy an image from one location to another",
+	Name:  "copy",
+	Usage: "Copy an IMAGE-NAME from one location to another",
+	Description: fmt.Sprintf(`
+
+	Container "IMAGE-NAME" uses a "transport":"details" format.
+
+	Supported transports:
+	%s
+
+	See skopeo(1) section "IMAGE NAMES" for the expected format
+	`, strings.Join(transports.ListNames(), ", ")),
 	ArgsUsage: "SOURCE-IMAGE DESTINATION-IMAGE",
 	Action:    copyHandler,
 	// FIXME: Do we need to namespace the GPG aspect?
@@ -94,7 +105,7 @@ var copyCmd = cli.Command{
 		},
 		cli.BoolTFlag{
 			Name:  "src-tls-verify",
-			Usage: "require HTTPS and verify certificates when talking to the docker source registry (defaults to true)",
+			Usage: "require HTTPS and verify certificates when talking to the container source registry (defaults to true)",
 		},
 		cli.StringFlag{
 			Name:  "dest-cert-dir",
@@ -103,7 +114,7 @@ var copyCmd = cli.Command{
 		},
 		cli.BoolTFlag{
 			Name:  "dest-tls-verify",
-			Usage: "require HTTPS and verify certificates when talking to the docker destination registry (defaults to true)",
+			Usage: "require HTTPS and verify certificates when talking to the container destination registry (defaults to true)",
 		},
 		cli.StringFlag{
 			Name:  "dest-ostree-tmp-dir",

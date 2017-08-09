@@ -22,7 +22,6 @@ import (
 	"github.com/Microsoft/go-winio/archive/tar"
 	"github.com/Microsoft/go-winio/backuptar"
 	"github.com/Microsoft/hcsshim"
-	"github.com/Sirupsen/logrus"
 	"github.com/containers/storage/drivers"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/containers/storage/pkg/idtools"
@@ -30,6 +29,7 @@ import (
 	"github.com/containers/storage/pkg/longpath"
 	"github.com/containers/storage/pkg/reexec"
 	"github.com/containers/storage/pkg/system"
+	"github.com/sirupsen/logrus"
 	"github.com/vbatts/tar-split/tar/storage"
 )
 
@@ -133,7 +133,7 @@ func (d *Driver) create(id, parent, mountLabel string, readOnly bool, storageOpt
 	var layerChain []string
 
 	if rPId != "" {
-		parentPath, err := hcsshim.GetLayerMountPath(d.info, rPId)
+		parentPath, err := hcsshim.LayerMountPath(d.info, rPId)
 		if err != nil {
 			return err
 		}
@@ -248,7 +248,7 @@ func (d *Driver) Get(id, mountLabel string) (string, error) {
 		return "", err
 	}
 
-	mountPath, err := hcsshim.GetLayerMountPath(d.info, rID)
+	mountPath, err := hcsshim.LayerMountPath(d.info, rID)
 	if err != nil {
 		d.ctr.Decrement(rID)
 		if err2 := hcsshim.DeactivateLayer(d.info, rID); err2 != nil {
@@ -403,7 +403,7 @@ func (d *Driver) ApplyDiff(id, parent string, diff archive.Reader) (int64, error
 		if err != nil {
 			return 0, err
 		}
-		parentPath, err := hcsshim.GetLayerMountPath(d.info, rPId)
+		parentPath, err := hcsshim.LayerMountPath(d.info, rPId)
 		if err != nil {
 			return 0, err
 		}
@@ -446,8 +446,8 @@ func (d *Driver) DiffSize(id, parent string) (size int64, err error) {
 	return archive.ChangesSize(layerFs, changes), nil
 }
 
-// GetMetadata returns custom driver information.
-func (d *Driver) GetMetadata(id string) (map[string]string, error) {
+// Metadata returns custom driver information.
+func (d *Driver) Metadata(id string) (map[string]string, error) {
 	m := make(map[string]string)
 	m["dir"] = d.dir(id)
 	return m, nil

@@ -2,36 +2,39 @@
 % Jhon Honce
 % August 2016
 # NAME
-skopeo -- Various operations with container images images and container image registries
+skopeo -- Various operations with container images and container image registries
 # SYNOPSIS
 **skopeo** [_global options_] _command_ [_command options_]
 # DESCRIPTION
-`skopeo` is a command line utility providing various operations with container images and container image registries. For example, it is able to inspect a repository on a Docker registry and fetch image. It fetches the repository's manifest and it is able to show you a `docker inspect`-like json output about a whole repository or a tag. This tool, in contrast to `docker inspect`, helps you gather useful information about a repository or a tag without requiring you to run `docker pull` - e.g. - which tags are available for the given repository? which labels the image has?
+`skopeo` is a command line utility providing various operations with container images and container image registries. For example, it is able to inspect a repository on a container registry and fetch image. It fetches the repository's manifest and it is able to show you a `docker inspect`-like json output about a whole repository or a tag. This tool, in contrast to `docker inspect`, helps you gather useful information about a repository or a tag without requiring you to run `docker pull` - e.g. - which tags are available for the given repository? which labels the image has?
 
 It also allows you to copy container images between various registries, possibly converting them as necessary, and to sign and verify images.
 ## IMAGE NAMES
 Most commands refer to container images, using a _transport_`:`_details_ format. The following formats are supported:
 
-  **atomic:**_namespace_**/**_stream_**:**_tag_
-  An image in the current project of the current default Atomic
-  Registry. The current project and Atomic Registry instance are by
-  default read from `$HOME/.kube/config`, which is set e.g. using
-  `(oc login)`.
+  **atomic:**_hostname_**/**_namespace_**/**_stream_**:**_tag_
+  An image served by an OpenShift(Atomic) Registry server. The current OpenShift project and OpenShift Registry instance are by default read from `$HOME/.kube/config`, which is set e.g. using `(oc login)`.
+
+  **containers-storage://**_docker-reference_
+  An image located in a local containers/storage image store.  Location and image store specified in /etc/containers/storage.conf
 
   **dir:**_path_
-  An existing local directory _path_ storing the manifest, layer
-  tarballs and signatures as individual files. This is a
-  non-standardized format, primarily useful for debugging or
-  noninvasive container inspection.
+  An existing local directory _path_ storing the manifest, layer tarballs and signatures as individual files. This is a non-standardized format, primarily useful for debugging or noninvasive container inspection.
 
   **docker://**_docker-reference_
-  An image in a registry implementing the "Docker Registry HTTP API V2".
-  By default, uses the authorization state in `$HOME/.docker/config.json`,
-  which is set e.g. using `(docker login)`.
+  An image in a registry implementing the "Docker Registry HTTP API V2". By default, uses the authorization state in `$HOME/.docker/config.json`, which is set e.g. using `(docker login)`.
+
+  **docker-archive:**_path_[**:**_docker-reference_]
+  An image is stored in the `docker save` formated file.  _docker-reference_ is only used when creating such a file, and it must not contain a digest.
+
+  **docker-daemon:**_docker-reference_
+  An image _docker-reference_ stored in the docker daemon internal storage.  _docker-reference_ must contain either a tag or a digest.  Alternatively, when reading images, the format can also be docker-daemon:algo:digest (an image ID).
 
   **oci:**_path_**:**_tag_
-  An image _tag_ in a directory compliant with "Open Container Image
-  Layout Specification" at _path_.
+  An image _tag_ in a directory compliant with "Open Container Image Layout Specification" at _path_.
+
+  **ostree:**_image_[**@**_/absolute/repo/path_]
+  An image in local OSTree repository.  _/absolute/repo/path_ defaults to _/ostree/repo_.
 
 # OPTIONS
 
@@ -41,7 +44,7 @@ Most commands refer to container images, using a _transport_`:`_details_ format.
 
   **--insecure-policy** Adopt an insecure, permissive policy that allows anything. This obviates the need for a policy file.
 
-  **--registries.d** _dir_ use registry configuration files in _dir_ (e.g. for docker signature storage), overriding the default path.
+  **--registries.d** _dir_ use registry configuration files in _dir_ (e.g. for container signature storage), overriding the default path.
 
   **--help**|**-h** Show help
 
@@ -70,20 +73,20 @@ Uses the system's trust policy to validate images, rejects images not trusted by
 
   **--src-cert-dir** _path_ Use certificates at _path_ (*.crt, *.cert, *.key) to connect to the source registry
 
-  **--src-tls-verify** _bool-value_ Require HTTPS and verify certificates when talking to docker source registry (defaults to true)
+  **--src-tls-verify** _bool-value_ Require HTTPS and verify certificates when talking to container source registry (defaults to true)
 
   **--dest-cert-dir** _path_ Use certificates at _path_ (*.crt, *.cert, *.key) to connect to the destination registry
 
   **--dest-ostree-tmp-dir** _path_ Directory to use for OSTree temporary files.
 
-  **--dest-tls-verify** _bool-value_ Require HTTPS and verify certificates when talking to docker destination registry (defaults to true)
+  **--dest-tls-verify** _bool-value_ Require HTTPS and verify certificates when talking to container destination registry (defaults to true)
 
 Existing signatures, if any, are preserved as well.
 
 ## skopeo delete
 **skopeo delete** _image-name_
 
-Mark _image-name_ for deletion.  To release the allocated disk space, you need to execute the docker registry garabage collector. E.g.,
+Mark _image-name_ for deletion.  To release the allocated disk space, you need to execute the container registry garabage collector. E.g.,
 
 ```sh
 $ docker exec -it registry bin/registry garbage-collect /etc/docker/registry/config.yml
@@ -93,7 +96,7 @@ $ docker exec -it registry bin/registry garbage-collect /etc/docker/registry/con
 
   **--cert-dir** _path_ Use certificates at _path_ (*.crt, *.cert, *.key) to connect to the registry
 
-  **--tls-verify** _bool-value_ Require HTTPS and verify certificates when talking to docker registries (defaults to true)
+  **--tls-verify** _bool-value_ Require HTTPS and verify certificates when talking to container registries (defaults to true)
 
 Additionally, the registry must allow deletions by setting `REGISTRY_STORAGE_DELETE_ENABLED=true` for the registry daemon.
 
@@ -110,7 +113,7 @@ Return low-level information about _image-name_ in a registry
 
   **--cert-dir** _path_ Use certificates at _path_ (*.crt, *.cert, *.key) to connect to the registry
 
-  **--tls-verify** _bool-value_ Require HTTPS and verify certificates when talking to docker registries (defaults to true)
+  **--tls-verify** _bool-value_ Require HTTPS and verify certificates when talking to container registries (defaults to true)
 
 ## skopeo manifest-digest
 **skopeo manifest-digest** _manifest-file_

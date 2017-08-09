@@ -3,12 +3,12 @@ package daemon
 import (
 	"io"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/containers/image/docker/reference"
 	"github.com/containers/image/docker/tarfile"
 	"github.com/containers/image/types"
 	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
@@ -76,6 +76,11 @@ func imageLoadGoroutine(ctx context.Context, c *client.Client, reader *io.PipeRe
 		return
 	}
 	defer resp.Body.Close()
+}
+
+// MustMatchRuntimeOS returns true iff the destination can store only images targeted for the current runtime OS. False otherwise.
+func (d *daemonImageDestination) MustMatchRuntimeOS() bool {
+	return true
 }
 
 // Close removes resources associated with an initialized ImageDestination, if any.

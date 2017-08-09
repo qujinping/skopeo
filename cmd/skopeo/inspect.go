@@ -6,11 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/containers/image/docker"
 	"github.com/containers/image/manifest"
+	"github.com/containers/image/transports"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
@@ -29,8 +30,16 @@ type inspectOutput struct {
 }
 
 var inspectCmd = cli.Command{
-	Name:      "inspect",
-	Usage:     "Inspect image IMAGE-NAME",
+	Name:  "inspect",
+	Usage: "Inspect image IMAGE-NAME",
+	Description: fmt.Sprintf(`
+	Return low-level information about "IMAGE-NAME" in a registry/transport
+
+	Supported transports:
+	%s
+
+	See skopeo(1) section "IMAGE NAMES" for the expected format
+	`, strings.Join(transports.ListNames(), ", ")),
 	ArgsUsage: "IMAGE-NAME",
 	Flags: []cli.Flag{
 		cli.StringFlag{
@@ -40,7 +49,7 @@ var inspectCmd = cli.Command{
 		},
 		cli.BoolTFlag{
 			Name:  "tls-verify",
-			Usage: "require HTTPS and verify certificates when talking to docker registries (defaults to true)",
+			Usage: "require HTTPS and verify certificates when talking to container registries (defaults to true)",
 		},
 		cli.BoolFlag{
 			Name:  "raw",

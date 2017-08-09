@@ -10,12 +10,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/containers/image/docker/reference"
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const temporaryDirectoryForBigFiles = "/var/tmp" // Do not use the system default of os.TempDir(), usually /tmp, because with systemd it could be a tmpfs.
@@ -78,6 +78,11 @@ func (d *Destination) ShouldCompressLayers() bool {
 // AcceptsForeignLayerURLs returns false iff foreign layers in manifest should be actually
 // uploaded to the image destination, true otherwise.
 func (d *Destination) AcceptsForeignLayerURLs() bool {
+	return false
+}
+
+// MustMatchRuntimeOS returns true iff the destination can store only images targeted for the current runtime OS. False otherwise.
+func (d *Destination) MustMatchRuntimeOS() bool {
 	return false
 }
 
@@ -156,10 +161,13 @@ func (d *Destination) ReapplyBlob(info types.BlobInfo) (types.BlobInfo, error) {
 	return info, nil
 }
 
-// PutManifest sends the given manifest blob to the destination.
-// FIXME? This should also receive a MIME type if known, to differentiate
-//        between schema versions.
+// PutManifest writes manifest to the destination.
+// FIXME? This should also receive a MIME type if known, to differentiate between schema versions.
+// If the destination is in principle available, refuses this manifest type (e.g. it does not recognize the schema),
+// but may accept a different manifest type, the returned error must be an ManifestTypeRejectedError.
 func (d *Destination) PutManifest(m []byte) error {
+	// We do not bother with types.ManifestTypeRejectedError; our .SupportedManifestMIMETypes() above is already providing only one alternative,
+	// so the caller trying a different manifest kind would be pointless.
 	var man schema2Manifest
 	if err := json.Unmarshal(m, &man); err != nil {
 		return errors.Wrap(err, "Error parsing manifest")
@@ -173,7 +181,7 @@ func (d *Destination) PutManifest(m []byte) error {
 		layerPaths = append(layerPaths, l.Digest.String())
 	}
 
-	items := []manifestItem{{
+	items := []ManifestItem{{
 		Config:       man.Config.Digest.String(),
 		RepoTags:     []string{d.repoTag},
 		Layers:       layerPaths,

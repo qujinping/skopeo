@@ -51,6 +51,11 @@ func (d *dirImageDestination) AcceptsForeignLayerURLs() bool {
 	return false
 }
 
+// MustMatchRuntimeOS returns true iff the destination can store only images targeted for the current runtime OS. False otherwise.
+func (d *dirImageDestination) MustMatchRuntimeOS() bool {
+	return false
+}
+
 // PutBlob writes contents of stream and returns data representing the result (with all data filled in).
 // inputInfo.Digest can be optionally provided if known; it is not mandatory for the implementation to verify it.
 // inputInfo.Size is the expected length of stream, if known.
@@ -118,6 +123,10 @@ func (d *dirImageDestination) ReapplyBlob(info types.BlobInfo) (types.BlobInfo, 
 	return info, nil
 }
 
+// PutManifest writes manifest to the destination.
+// FIXME? This should also receive a MIME type if known, to differentiate between schema versions.
+// If the destination is in principle available, refuses this manifest type (e.g. it does not recognize the schema),
+// but may accept a different manifest type, the returned error must be an ManifestTypeRejectedError.
 func (d *dirImageDestination) PutManifest(manifest []byte) error {
 	return ioutil.WriteFile(d.ref.manifestPath(), manifest, 0644)
 }
